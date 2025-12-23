@@ -339,11 +339,138 @@
                     </div>
                 </div>
             </section>
+
+            <!-- Image Encryption Section -->
+            <section id="image-encryption-section" class="section">
+                <h2>🖼️ Image Encryption with UACI & NPCR Analysis</h2>
+                
+                <!-- Image Upload Controls -->
+                <div class="image-controls">
+                    <div class="control-group">
+                        <h3>Upload Image</h3>
+                        <input type="file" id="imageInput" accept="image/*" class="file-input">
+                        <label for="imageInput" class="btn btn-primary">📤 Upload Image</label>
+                        <div class="image-info" id="imageInfo"></div>
+                    </div>
+                    
+                    <div class="control-group">
+                        <h3>Encryption Settings</h3>
+                        <div class="input-group">
+                            <label for="image-key">Encryption Key:</label>
+                            <input type="text" id="image-key" placeholder="Enter 16 character key" maxlength="16">
+                            <span class="input-hint">Enter a 16-character password for encryption</span>
+                        </div>
+                        <div class="encryption-buttons">
+                            <button id="encrypt-image" class="btn btn-primary" disabled>🔐 Encrypt Image</button>
+                            <button id="decrypt-image" class="btn btn-secondary" disabled>🔓 Decrypt Image</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Image Preview -->
+                <div class="image-preview-section">
+                    <div class="preview-container">
+                        <div class="preview-box">
+                            <h4>Original Image</h4>
+                            <canvas id="originalImageCanvas" width="300" height="300"></canvas>
+                            <p id="original-size" class="image-size">-</p>
+                        </div>
+                        <div class="preview-box">
+                            <h4>Encrypted Image</h4>
+                            <canvas id="encryptedImageCanvas" width="300" height="300"></canvas>
+                            <p id="encrypted-size" class="image-size">-</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Encryption Results & Analysis -->
+                <div class="encryption-analysis-section" id="encryption-analysis" style="display: none;">
+                    <h3>📊 Analysis Results</h3>
+                    
+                    <!-- Metrics Cards -->
+                    <div class="metrics-grid">
+                        <div class="metric-card">
+                            <h4>NPCR (Number of Pixels Change Rate)</h4>
+                            <div class="metric-value" id="npcr-value">-</div>
+                            <div class="metric-description">
+                                <p><strong>Deskripsi:</strong> NPCR mengukur persentase piksel yang berubah antara gambar asli dan terenkripsi.</p>
+                                <p><strong>Rumus:</strong> NPCR = (D / (W × H)) × 100%</p>
+                                <p>Dimana: D = jumlah piksel yang berbeda, W = lebar, H = tinggi gambar</p>
+                                <p><strong>Nilai Ideal:</strong> > 99% (menunjukkan enkripsi yang baik)</p>
+                            </div>
+                        </div>
+                        
+                        <div class="metric-card">
+                            <h4>UACI (Unified Average Change in Intensity)</h4>
+                            <div class="metric-value" id="uaci-value">-</div>
+                            <div class="metric-description">
+                                <p><strong>Deskripsi:</strong> UACI mengukur rata-rata perubahan intensitas piksel antara gambar asli dan terenkripsi.</p>
+                                <p><strong>Rumus:</strong> UACI = (1 / (W × H × 255)) × Σ|Asli[i,j] - Enkripsi[i,j]|</p>
+                                <p>Jumlahan dilakukan untuk semua piksel (i,j) dalam gambar</p>
+                                <p><strong>Nilai Ideal:</strong> ≈ 33% (menunjukkan distribusi yang acak)</p>
+                            </div>
+                        </div>
+
+                        <div class="metric-card">
+                            <h4>Encryption Time</h4>
+                            <div class="metric-value" id="encryption-time-value">-</div>
+                            <div class="metric-description">
+                                <p><strong>Deskripsi:</strong> Waktu yang diperlukan untuk mengenkripsi seluruh gambar.</p>
+                                <p><strong>Satuan:</strong> Milidetik (ms)</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Histograms -->
+                    <div class="histogram-section">
+                        <h3>📈 Histogram Analysis</h3>
+                        <div class="histogram-description">
+                            <p><strong>Deskripsi Histogram:</strong> Histogram menunjukkan distribusi nilai intensitas (0-255) untuk setiap saluran warna (Merah, Hijau, Biru).</p>
+                            <ul>
+                                <li><strong>Histogram Asli:</strong> Menunjukkan pola frekuensi nilai piksel dalam gambar asli.</li>
+                                <li><strong>Histogram Terenkripsi:</strong> Harus menunjukkan distribusi yang hampir merata/uniform, mengindikasikan bahwa informasi asli sudah tersembunyi.</li>
+                                <li><strong>Analisis:</strong> Semakin merata histogram terenkripsi, semakin baik kualitas enkripsi.</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="histogram-container">
+                            <div class="histogram-box">
+                                <h4>Original Image Histogram</h4>
+                                <canvas id="originalHistogramCanvas" height="250"></canvas>
+                            </div>
+                            <div class="histogram-box">
+                                <h4>Encrypted Image Histogram</h4>
+                                <canvas id="encryptedHistogramCanvas" height="250"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Download Results -->
+                    <div class="download-section">
+                        <button id="download-encrypted" class="btn btn-primary">💾 Download Encrypted Image</button>
+                        <button id="download-analysis" class="btn btn-secondary">📊 Download Analysis Report</button>
+                    </div>
+                </div>
+
+                <!-- Info Section -->
+                <div class="info-section">
+                    <h4>ℹ️ Informasi Enkripsi Gambar</h4>
+                    <p>Fitur ini mengenkripsi gambar menggunakan algoritma AES dengan S-box standar AES. Setiap piksel dienkripsi secara independen.</p>
+                    <ul>
+                        <li><strong>Algoritma:</strong> AES (Advanced Encryption Standard)</li>
+                        <li><strong>Ukuran Kunci:</strong> 128 bit</li>
+                        <li><strong>Metrik Keamanan:</strong> NPCR dan UACI</li>
+                        <li><strong>Analisis Visual:</strong> Histogram untuk distribusi intensitas</li>
+                    </ul>
+                </div>
+            </section>
         </main>
     </div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <script src="analyzer.js"></script>
     <script src="aes-visualizer.js"></script>
+    <script src="image-encryption.js"></script>
     <script src="script.js"></script>
 </body>
 </html>
