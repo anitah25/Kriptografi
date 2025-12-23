@@ -1,49 +1,124 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>S-Box Analysis Dashboard</title>
-    <link rel="stylesheet" href="style.css">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="style.css?v=3.0">
+    
     <!-- SheetJS library for Excel file parsing -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
     <div class="dashboard">
+        <!-- Header -->
         <header class="header">
-            <h1>S-Box Analysis Dashboard</h1>
-            <p>Upload, generate, and analyze AES S-boxes</p>
+            <h1>🔐 S-Box Analysis Dashboard</h1>
+            <p>Analyze AES S-boxes with comprehensive cryptographic metrics</p>
+            <span class="header-badge">✨ v3.0 - Glass Edition</span>
         </header>
+
+        <!-- Navigation Tabs -->
+        <nav class="nav-tabs">
+            <button class="nav-tab active" data-section="input-section">
+                <span class="nav-icon">📥</span>
+                <span>Input</span>
+            </button>
+            <button class="nav-tab" data-section="display-section">
+                <span class="nav-icon">📊</span>
+                <span>Grid</span>
+            </button>
+            <button class="nav-tab" data-section="analysis-section">
+                <span class="nav-icon">🔬</span>
+                <span>Analysis</span>
+            </button>
+            <button class="nav-tab" data-section="simulation-section">
+                <span class="nav-icon">🧪</span>
+                <span>AES Lab</span>
+            </button>
+            <button class="nav-tab" data-section="image-encryption-section">
+                <span class="nav-icon">🖼️</span>
+                <span>Image</span>
+            </button>
+            <button class="theme-toggle" id="themeToggle" title="Toggle Dark Mode">
+                🌙
+            </button>
+        </nav>
 
         <main class="main-content">
             <!-- S-Box Input Section -->
-            <section class="input-section">
+            <section class="input-section section-content" id="input-section">
                 <h2>S-Box Input</h2>
                 
                 <div class="input-controls">
                     <!-- Upload S-box -->
                     <div class="control-group">
-                        <h3>Upload S-box</h3>
+                        <h3>📤 Upload S-box</h3>
                         <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" class="file-input">
-                        <label for="fileInput" class="btn btn-primary">Upload S-box (Excel/CSV)</label>
+                        <label for="fileInput" class="btn btn-primary">
+                            <span>📁</span> Upload S-box (Excel/CSV)
+                        </label>
                         <div class="file-info" id="fileInfo"></div>
                     </div>
                     
                     <!-- Generate Random S-box -->
                     <div class="control-group">
-                        <h3>Generate S-box</h3>
-                        <button id="generateRandomSbox" class="btn btn-secondary">Generate Random S-box</button>
-                        <button id="loadStandardSbox" class="btn btn-secondary">Load Standard AES S-box</button>
+                        <h3>🎲 Generate S-box</h3>
+                        <button id="generateRandomSbox" class="btn btn-secondary">
+                            <span>🔀</span> Generate Random S-box
+                        </button>
+                        <button id="loadStandardSbox" class="btn btn-secondary">
+                            <span>🔷</span> Load Standard AES S-box
+                        </button>
+                    </div>
+
+                    <!-- Generate Affine S-box -->
+                    <div class="control-group">
+                        <h3>🧮 Affine S-box Generator</h3>
+                        <div class="affine-controls">
+                            <div class="input-group">
+                                <label for="affineMatrixSelect">Select Matrix (K):</label>
+                                <select id="affineMatrixSelect" class="select-input">
+                                    <!-- Options will be populated by JS -->
+                                </select>
+                            </div>
+                            <div class="input-group">
+                                <label for="affineConstant">Additive Constant (C):</label>
+                                <input type="text" id="affineConstant" value="63" class="input-text" placeholder="Hex value">
+                                <span class="input-hint">Default: 0x63 (standard AES)</span>
+                            </div>
+                        </div>
+                        <button id="generateAffineSbox" class="btn btn-primary">
+                            <span>⚡</span> Generate using Affine Matrix
+                        </button>
+                        <div class="input-hint" style="margin-top: 8px;">
+                            Uses GF(2⁸) Inverse + Affine Transform (K1-K128)
+                        </div>
                     </div>
                 </div>
             </section>
 
             <!-- S-Box Display Section -->
-            <section class="display-section">
+            <section class="display-section section-content" id="display-section">
                 <h2>Current S-Box</h2>
                 <div class="sbox-info">
                     <span id="sboxStatus">No S-box loaded</span>
-                    <button id="clearSbox" class="btn btn-small">Clear</button>
+                    <div>
+                        <button id="clearSbox" class="btn btn-small btn-secondary">Clear</button>
+                        <button id="downloadSbox" class="btn btn-small btn-primary">💾 Export</button>
+                    </div>
+                </div>
+                
+                <!-- S-Box Grid Info -->
+                <div class="sbox-grid-info">
+                    <p>📊 16×16 Hexadecimal lookup table. Row = high nibble, Column = low nibble. Click any cell for details.</p>
                 </div>
                 
                 <!-- 16x16 Hexadecimal Grid -->
@@ -52,19 +127,36 @@
                         <!-- Grid will be populated by JavaScript -->
                     </div>
                 </div>
+                
+                <!-- Heatmap Legend -->
+                <div class="heatmap-legend" id="heatmapLegend" style="display: none;">
+                    <span>Value Range:</span>
+                    <div class="legend-bar">
+                        <span class="legend-low">0x00</span>
+                        <div class="legend-gradient"></div>
+                        <span class="legend-high">0xFF</span>
+                    </div>
+                </div>
             </section>
 
             <!-- Analysis Section -->
-            <section class="analysis-section">
+            <section class="analysis-section section-content" id="analysis-section">
                 <h2>Cryptographic Analysis</h2>
                 
                 <div class="analysis-controls">
-                    <button id="runAnalysis" class="btn btn-primary">Run Full Analysis</button>
-                    <button id="exportAnalysis" class="btn btn-secondary">Export Results</button>
-                    <button id="clearAnalysis" class="btn btn-secondary">Clear Results</button>
+                    <button id="runAnalysis" class="btn btn-primary">
+                        <span>▶️</span> Run Full Analysis
+                    </button>
+                    <button id="exportAnalysis" class="btn btn-secondary">
+                        <span>📤</span> Export Results
+                    </button>
+                    <button id="clearAnalysis" class="btn btn-secondary">
+                        <span>🗑️</span> Clear Results
+                    </button>
                 </div>
                 
                 <div class="analysis-status" id="analysisStatus">
+                    <span class="loading-spinner" style="display: none;"></span>
                     <span>No analysis performed yet</span>
                 </div>
                 
@@ -72,27 +164,51 @@
                 <div class="analysis-results" id="analysisResults" style="display: none;">
                     <div class="results-grid">
                         <div class="result-card">
-                            <h4>Non-Linearity (NL)</h4>
+                            <h4>Bijectivity</h4>
+                            <div class="result-value" id="bijectivityValue">-</div>
+                            <div class="result-description">One-to-one mapping check</div>
+                        </div>
+
+                        <div class="result-card">
+                            <h4>Nonlinearity (NL)</h4>
                             <div class="result-value" id="nlValue">-</div>
                             <div class="result-description">Resistance to linear cryptanalysis</div>
                         </div>
                         
                         <div class="result-card">
-                            <h4>Differential Uniformity (DU)</h4>
-                            <div class="result-value" id="duValue">-</div>
-                            <div class="result-description">Resistance to differential cryptanalysis</div>
-                        </div>
-                        
-                        <div class="result-card">
-                            <h4>SAC Score</h4>
+                            <h4>Strict Avalanche (SAC)</h4>
                             <div class="result-value" id="sacValue">-</div>
-                            <div class="result-description">Strict Avalanche Criterion</div>
+                            <div class="result-description">Bit change propagation</div>
                         </div>
                         
                         <div class="result-card">
-                            <h4>Linear Bias (Max)</h4>
+                            <h4>BIC-NL</h4>
+                            <div class="result-value" id="bicNlValue">-</div>
+                            <div class="result-description">Bit Independence (Nonlinearity)</div>
+                        </div>
+
+                        <div class="result-card">
+                            <h4>BIC-SAC</h4>
+                            <div class="result-value" id="bicSacValue">-</div>
+                            <div class="result-description">Avg SAC of XOR (Ideal: 0.5)</div>
+                        </div>
+
+                        <div class="result-card">
+                            <h4>Linear Approx (LAP)</h4>
                             <div class="result-value" id="lapValue">-</div>
-                            <div class="result-description">Maximum linear approximation bias</div>
+                            <div class="result-description">Max Linear Probability</div>
+                        </div>
+
+                        <div class="result-card">
+                            <h4>Diff Approx (DAP)</h4>
+                            <div class="result-value" id="dapValue">-</div>
+                            <div class="result-description">Max Differential Probability</div>
+                        </div>
+                        
+                        <div class="result-card">
+                            <h4>Diff Uniformity (DU)</h4>
+                            <div class="result-value" id="duValue">-</div>
+                            <div class="result-description">Max differential count</div>
                         </div>
                         
                         <div class="result-card">
@@ -105,12 +221,6 @@
                             <h4>Transparency Order (TO)</h4>
                             <div class="result-value" id="toValue">-</div>
                             <div class="result-description">Higher-order statistical properties</div>
-                        </div>
-                        
-                        <div class="result-card">
-                            <h4>BIC-NL</h4>
-                            <div class="result-value" id="bicNlValue">-</div>
-                            <div class="result-description">Bit Independence (Nonlinearity)</div>
                         </div>
                         
                         <div class="result-card">
@@ -128,7 +238,7 @@
             </section>
 
             <!-- Simulation Lab -->
-            <section id="simulation-section" class="section">
+            <section id="simulation-section" class="section-content">
                 <h2>🧪 AES Simulation Lab</h2>
                 <div class="simulation-container">
                     <!-- Input Configuration -->
@@ -186,10 +296,10 @@
                         </div>
                         
                         <div class="simulation-controls">
-                            <button id="sim-start" class="btn-primary">🎬 Start Simulation</button>
-                            <button id="sim-prev" class="btn-secondary" disabled>⏪ Previous Step</button>
-                            <button id="sim-next" class="btn-secondary" disabled>⏩ Next Step</button>
-                            <button id="sim-reset" class="btn-secondary">🔄 Reset</button>
+                            <button id="sim-start" class="btn btn-primary">🎬 Start Simulation</button>
+                            <button id="sim-prev" class="btn btn-secondary" disabled>⏪ Previous</button>
+                            <button id="sim-next" class="btn btn-secondary" disabled>⏩ Next</button>
+                            <button id="sim-reset" class="btn btn-secondary">🔄 Reset</button>
                         </div>
                     </div>
 
@@ -213,7 +323,6 @@
                             <h3>AES State Matrix</h3>
                             <div class="matrix-wrapper">
                                 <div class="state-matrix" id="state-matrix">
-                                    <!-- 4x4 grid will be generated here -->
                                     <div class="matrix-cell" data-pos="0,0">00</div>
                                     <div class="matrix-cell" data-pos="0,1">00</div>
                                     <div class="matrix-cell" data-pos="0,2">00</div>
@@ -282,11 +391,10 @@
                                 </div>
                             </div>
                             
-                            <!-- Copy and Decrypt Options -->
                             <div class="result-actions">
-                                <button id="copy-ciphertext" class="btn-secondary">📋 Copy Ciphertext</button>
-                                <button id="start-decryption" class="btn-primary">🔓 Decrypt This</button>
-                                <button id="save-result" class="btn-secondary">💾 Save Result</button>
+                                <button id="copy-ciphertext" class="btn btn-secondary">📋 Copy Ciphertext</button>
+                                <button id="start-decryption" class="btn btn-primary">🔓 Decrypt This</button>
+                                <button id="save-result" class="btn btn-secondary">💾 Save Result</button>
                             </div>
                         </div>
 
@@ -307,13 +415,12 @@
                                 </div>
                                 
                                 <div class="decryption-controls">
-                                    <button id="decrypt-start" class="btn-primary">🎬 Start Decryption</button>
-                                    <button id="decrypt-reset" class="btn-secondary">🔄 Reset</button>
-                                    <button id="switch-to-encrypt" class="btn-secondary">🔐 Back to Encryption</button>
+                                    <button id="decrypt-start" class="btn btn-primary">🎬 Start Decryption</button>
+                                    <button id="decrypt-reset" class="btn btn-secondary">🔄 Reset</button>
+                                    <button id="switch-to-encrypt" class="btn btn-secondary">🔐 Back to Encryption</button>
                                 </div>
                             </div>
                             
-                            <!-- Decryption Result -->
                             <div class="decryption-result" id="decryption-result" style="display: none;">
                                 <h5>📖 Decryption Result</h5>
                                 <div class="result-display">
@@ -341,33 +448,33 @@
             </section>
 
             <!-- Image Encryption Section -->
-            <section id="image-encryption-section" class="section">
+            <section id="image-encryption-section" class="section-content">
                 <h2>🖼️ Image Encryption with UACI & NPCR Analysis</h2>
                 
-                <!-- Image Upload Controls -->
                 <div class="image-controls">
                     <div class="control-group">
-                        <h3>Upload Image</h3>
+                        <h3>📤 Upload Image</h3>
                         <input type="file" id="imageInput" accept="image/*" class="file-input">
-                        <label for="imageInput" class="btn btn-primary">📤 Upload Image</label>
-                        <div class="image-info" id="imageInfo"></div>
+                        <label for="imageInput" class="btn btn-primary">
+                            <span>🖼️</span> Upload Image
+                        </label>
+                        <div class="file-info" id="imageInfo"></div>
                     </div>
                     
                     <div class="control-group">
-                        <h3>Encryption Settings</h3>
+                        <h3>🔑 Encryption Settings</h3>
                         <div class="input-group">
                             <label for="image-key">Encryption Key:</label>
                             <input type="text" id="image-key" placeholder="Enter 16 character key" maxlength="16">
                             <span class="input-hint">Enter a 16-character password for encryption</span>
                         </div>
-                        <div class="encryption-buttons">
+                        <div class="encryption-buttons" style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
                             <button id="encrypt-image" class="btn btn-primary" disabled>🔐 Encrypt Image</button>
                             <button id="decrypt-image" class="btn btn-secondary" disabled>🔓 Decrypt Image</button>
                         </div>
                     </div>
                 </div>
 
-                <!-- Image Preview -->
                 <div class="image-preview-section">
                     <div class="preview-container">
                         <div class="preview-box">
@@ -383,31 +490,27 @@
                     </div>
                 </div>
 
-                <!-- Encryption Results & Analysis -->
                 <div class="encryption-analysis-section" id="encryption-analysis" style="display: none;">
                     <h3>📊 Analysis Results</h3>
                     
-                    <!-- Metrics Cards -->
                     <div class="metrics-grid">
                         <div class="metric-card">
                             <h4>NPCR (Number of Pixels Change Rate)</h4>
                             <div class="metric-value" id="npcr-value">-</div>
                             <div class="metric-description">
-                                <p><strong>Deskripsi:</strong> NPCR mengukur persentase piksel yang berubah antara gambar asli dan terenkripsi.</p>
-                                <p><strong>Rumus:</strong> NPCR = (D / (W × H)) × 100%</p>
-                                <p>Dimana: D = jumlah piksel yang berbeda, W = lebar, H = tinggi gambar</p>
-                                <p><strong>Nilai Ideal:</strong> > 99% (menunjukkan enkripsi yang baik)</p>
+                                <p><strong>Description:</strong> Measures % of changed pixels between original and encrypted image.</p>
+                                <p><strong>Formula:</strong> NPCR = (D / (W × H)) × 100%</p>
+                                <p><strong>Ideal:</strong> > 99% (indicates good encryption)</p>
                             </div>
                         </div>
                         
                         <div class="metric-card">
-                            <h4>UACI (Unified Average Change in Intensity)</h4>
+                            <h4>UACI (Unified Avg Change in Intensity)</h4>
                             <div class="metric-value" id="uaci-value">-</div>
                             <div class="metric-description">
-                                <p><strong>Deskripsi:</strong> UACI mengukur rata-rata perubahan intensitas piksel antara gambar asli dan terenkripsi.</p>
-                                <p><strong>Rumus:</strong> UACI = (1 / (W × H × 255)) × Σ|Asli[i,j] - Enkripsi[i,j]|</p>
-                                <p>Jumlahan dilakukan untuk semua piksel (i,j) dalam gambar</p>
-                                <p><strong>Nilai Ideal:</strong> ≈ 33% (menunjukkan distribusi yang acak)</p>
+                                <p><strong>Description:</strong> Measures average pixel intensity change.</p>
+                                <p><strong>Formula:</strong> UACI = (1 / (W × H × 255)) × Σ|Original - Encrypted|</p>
+                                <p><strong>Ideal:</strong> ≈ 33% (indicates random distribution)</p>
                             </div>
                         </div>
 
@@ -415,21 +518,20 @@
                             <h4>Encryption Time</h4>
                             <div class="metric-value" id="encryption-time-value">-</div>
                             <div class="metric-description">
-                                <p><strong>Deskripsi:</strong> Waktu yang diperlukan untuk mengenkripsi seluruh gambar.</p>
-                                <p><strong>Satuan:</strong> Milidetik (ms)</p>
+                                <p><strong>Description:</strong> Time required to encrypt the entire image.</p>
+                                <p><strong>Unit:</strong> Milliseconds (ms)</p>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Histograms -->
                     <div class="histogram-section">
                         <h3>📈 Histogram Analysis</h3>
                         <div class="histogram-description">
-                            <p><strong>Deskripsi Histogram:</strong> Histogram menunjukkan distribusi nilai intensitas (0-255) untuk setiap saluran warna (Merah, Hijau, Biru).</p>
+                            <p><strong>Purpose:</strong> Histograms show pixel intensity distribution (0-255) for each color channel.</p>
                             <ul>
-                                <li><strong>Histogram Asli:</strong> Menunjukkan pola frekuensi nilai piksel dalam gambar asli.</li>
-                                <li><strong>Histogram Terenkripsi:</strong> Harus menunjukkan distribusi yang hampir merata/uniform, mengindikasikan bahwa informasi asli sudah tersembunyi.</li>
-                                <li><strong>Analisis:</strong> Semakin merata histogram terenkripsi, semakin baik kualitas enkripsi.</li>
+                                <li><strong>Original:</strong> Shows frequency pattern of pixel values in original image.</li>
+                                <li><strong>Encrypted:</strong> Should show nearly uniform distribution, indicating hidden information.</li>
+                                <li><strong>Analysis:</strong> More uniform = better encryption quality.</li>
                             </ul>
                         </div>
                         
@@ -445,32 +547,106 @@
                         </div>
                     </div>
 
-                    <!-- Download Results -->
                     <div class="download-section">
                         <button id="download-encrypted" class="btn btn-primary">💾 Download Encrypted Image</button>
                         <button id="download-analysis" class="btn btn-secondary">📊 Download Analysis Report</button>
                     </div>
                 </div>
 
-                <!-- Info Section -->
                 <div class="info-section">
-                    <h4>ℹ️ Informasi Enkripsi Gambar</h4>
-                    <p>Fitur ini mengenkripsi gambar menggunakan algoritma AES dengan S-box standar AES. Setiap piksel dienkripsi secara independen.</p>
+                    <h4>ℹ️ Image Encryption Information</h4>
+                    <p>This feature encrypts images using AES algorithm with standard or custom S-box. Each pixel is encrypted independently.</p>
                     <ul>
-                        <li><strong>Algoritma:</strong> AES (Advanced Encryption Standard)</li>
-                        <li><strong>Ukuran Kunci:</strong> 128 bit</li>
-                        <li><strong>Metrik Keamanan:</strong> NPCR dan UACI</li>
-                        <li><strong>Analisis Visual:</strong> Histogram untuk distribusi intensitas</li>
+                        <li><strong>Algorithm:</strong> AES (Advanced Encryption Standard)</li>
+                        <li><strong>Key Size:</strong> 128 bit</li>
+                        <li><strong>Security Metrics:</strong> NPCR and UACI</li>
+                        <li><strong>Visual Analysis:</strong> Histogram for intensity distribution</li>
                     </ul>
                 </div>
             </section>
         </main>
     </div>
 
+    <!-- Toast Notification Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Scripts -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
-    <script src="analyzer.js"></script>
-    <script src="aes-visualizer.js"></script>
-    <script src="image-encryption.js"></script>
-    <script src="script.js"></script>
+    <script src="analyzer.js?v=2.1"></script>
+    <script src="aes-visualizer.js?v=2.1"></script>
+    <script src="image-encryption.js?v=2.1"></script>
+    <script src="script.js?v=2.1"></script>
+    
+    <!-- Theme Toggle & Navigation Script -->
+    <script>
+        // Theme Toggle
+        const themeToggle = document.getElementById('themeToggle');
+        const html = document.documentElement;
+        
+        // Load saved theme
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        html.setAttribute('data-theme', savedTheme);
+        themeToggle.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+        
+        themeToggle.addEventListener('click', () => {
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            themeToggle.textContent = newTheme === 'dark' ? '☀️' : '🌙';
+        });
+        
+        // Navigation Tabs
+        const navTabs = document.querySelectorAll('.nav-tab[data-section]');
+        const sections = document.querySelectorAll('.section-content');
+        
+        navTabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const targetSection = tab.getAttribute('data-section');
+                
+                // Update active tab
+                navTabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                
+                // Show target section, hide others (smooth scroll)
+                const target = document.getElementById(targetSection);
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
+        });
+        
+        // Toast Notification System
+        function showToast(message, type = 'info', duration = 3000) {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.innerHTML = `
+                <span class="toast-icon">${type === 'success' ? '✅' : type === 'error' ? '❌' : type === 'warning' ? '⚠️' : 'ℹ️'}</span>
+                <span class="toast-message">${message}</span>
+            `;
+            container.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.animation = 'slideOutRight 0.3s ease forwards';
+                setTimeout(() => toast.remove(), 300);
+            }, duration);
+        }
+        
+        // Make showToast globally available
+        window.showToast = showToast;
+        
+        // Add slideOutRight animation
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideOutRight {
+                to {
+                    opacity: 0;
+                    transform: translateX(100%);
+                }
+            }
+        `;
+        document.head.appendChild(style);
+    </script>
 </body>
 </html>

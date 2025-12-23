@@ -58,18 +58,47 @@ class SBoxAnalyzer {
     walshHadamardTransform(truthTable) {
         const n = this.n;
         const size = 1 << n;
+        // Convert 0/1 truth table to 1/-1 for WHT
+        // If input is already 1/-1 (or similar), this might need adjustment.
+        // The Python code uses: f.append(1 if bit_val == 0 else -1)
+        // My JS code usually passes 0/1.
+        // Let's check getBooleanFunction. It returns 0/1.
+        // The Python code converts 0 -> 1, 1 -> -1.
+        // My JS WHT implementation:
+        // sum += Math.pow(-1, truthTable[x] ^ dotProduct);
+        // This assumes truthTable[x] is 0 or 1.
+        // If truthTable[x] is 0, (-1)^(0^d) = (-1)^d.
+        // If truthTable[x] is 1, (-1)^(1^d) = -(-1)^d.
+        // This is equivalent to (1 - 2*truthTable[x]) * (-1)^d.
+        // Which is (1 if 0 else -1) * (-1)^d.
+        // So the logic is consistent.
+        
         const walsh = new Array(size);
         
-        for (let w = 0; w < size; w++) {
-            let sum = 0;
-            for (let x = 0; x < size; x++) {
-                const dotProduct = this.hammingWeights[x & w] & 1;
-                sum += Math.pow(-1, truthTable[x] ^ dotProduct);
-            }
-            walsh[w] = sum;
+        // Fast Walsh-Hadamard Transform (FWHT) implementation
+        // The previous implementation was O(N^2), this is O(N log N)
+        const f = new Array(size);
+        for(let i=0; i<size; i++) {
+            // Convert 0/1 to 1/-1
+            // If truthTable contains 0/1:
+            f[i] = truthTable[i] === 0 ? 1 : -1;
         }
         
-        return walsh;
+        // Iterative FWHT
+        let h = 1;
+        while (h < size) {
+            for (let i = 0; i < size; i += h * 2) {
+                for (let j = i; j < i + h; j++) {
+                    const x = f[j];
+                    const y = f[j + h];
+                    f[j] = x + y;
+                    f[j + h] = x - y;
+                }
+            }
+            h *= 2;
+        }
+        
+        return f;
     }
 
     // 1. Non-Linearity (NL)
@@ -97,6 +126,8 @@ class SBoxAnalyzer {
     // 2. Strict Avalanche Criterion (SAC)
     calculateSAC() {
         const sacMatrix = Array(this.n).fill().map(() => Array(this.n).fill(0));
+        let totalSac = 0;
+        let count = 0;
         
         for (let inputBit = 0; inputBit < this.n; inputBit++) {
             for (let outputBit = 0; outputBit < this.n; outputBit++) {
@@ -113,20 +144,24 @@ class SBoxAnalyzer {
                 }
                 
                 sacMatrix[inputBit][outputBit] = flipCount / this.size;
+                
+                // For average calculation (matching Python logic)
+                // Python: total_sac += hw(diff). count += 8.
+                // Here we iterate output bits. hw(diff) is sum of flips across output bits.
+                // So flipCount contributes to total_sac.
+                totalSac += flipCount;
+                count += this.size; 
             }
         }
         
-        // Calculate SAC score (deviation from ideal 0.5)
-        let sacScore = 0;
-        for (let i = 0; i < this.n; i++) {
-            for (let j = 0; j < this.n; j++) {
-                sacScore += Math.abs(sacMatrix[i][j] - 0.5);
-            }
-        }
+        // Python returns total_sac / (8 * 256 * 8)
+        // Here totalSac is sum of all bit flips.
+        // count is 8 * 8 * 256.
+        // So average is totalSac / count.
         
         return {
             matrix: sacMatrix,
-            score: sacScore / (this.n * this.n),
+            score: totalSac / count, // Average SAC probability
             maxDeviation: Math.max(...sacMatrix.flat().map(x => Math.abs(x - 0.5)))
         };
     }
@@ -166,45 +201,70 @@ class SBoxAnalyzer {
     }
 
     // 4. Bit Independence Criterion - SAC (BIC-SAC)
+    // Calculates average SAC of the XOR sum of any two output bits
     calculateBIC_SAC() {
-        const correlations = [];
+        let totalSacXor = 0;
+        let countXor = 0;
         
-        for (let bit1 = 0; bit1 < this.n; bit1++) {
-            for (let bit2 = bit1 + 1; bit2 < this.n; bit2++) {
-                let correlation = 0;
+        for (let i = 0; i < this.n; i++) {
+            for (let j = i + 1; j < this.n; j++) {
+                let currentSacSum = 0;
+                let currentCount = 0;
                 
-                for (let x = 0; x < this.size; x++) {
-                    const y = this.sbox[x];
-                    const bit1Val = (y >> bit1) & 1;
-                    const bit2Val = (y >> bit2) & 1;
-                    correlation += (2 * bit1Val - 1) * (2 * bit2Val - 1);
+                for (let k = 0; k < this.n; k++) { // Input bit to flip
+                    for (let x = 0; x < this.size; x++) {
+                        const xFlipped = x ^ (1 << k);
+                        const y1 = this.sbox[x];
+                        const y2 = this.sbox[xFlipped];
+                        
+                        const b1_i = (y1 >> i) & 1;
+                        const b1_j = (y1 >> j) & 1;
+                        const h1 = b1_i ^ b1_j;
+                        
+                        const b2_i = (y2 >> i) & 1;
+                        const b2_j = (y2 >> j) & 1;
+                        const h2 = b2_i ^ b2_j;
+                        
+                        if (h1 !== h2) {
+                            currentSacSum++;
+                        }
+                        currentCount++;
+                    }
                 }
                 
-                correlations.push(Math.abs(correlation / this.size));
+                totalSacXor += (currentSacSum / currentCount);
+                countXor++;
             }
         }
         
         return {
-            maxCorrelation: Math.max(...correlations),
-            averageCorrelation: correlations.reduce((a, b) => a + b, 0) / correlations.length,
-            correlations: correlations
+            averageSAC: totalSacXor / countXor
         };
     }
 
     // 5. Linear Approximation Probability (LAP)
     calculateLAP() {
-        if (!this.linearApproxTable) {
-            this.buildLinearApproximationTable();
-        }
-        
         let maxBias = 0;
         
-        // Find maximum bias (excluding zero input/output masks)
-        for (let a = 0; a < this.size; a++) {
-            for (let b = 0; b < this.size; b++) {
-                if (a !== 0 || b !== 0) {
-                    maxBias = Math.max(maxBias, Math.abs(this.linearApproxTable[a][b]));
+        // Iterate over all non-zero output masks b
+        for (let b = 1; b < this.size; b++) {
+            const f = new Array(this.size);
+            for (let x = 0; x < this.size; x++) {
+                const val = this.sbox[x];
+                // Dot product of b and val
+                let dotProd = 0;
+                let temp = b & val;
+                while (temp) {
+                    dotProd ^= (temp & 1);
+                    temp >>= 1;
                 }
+                f[x] = dotProd === 0 ? 0 : 1;
+            }
+            
+            const wht = this.walshHadamardTransform(f);
+            
+            for (let i = 0; i < this.size; i++) {
+                maxBias = Math.max(maxBias, Math.abs(wht[i]));
             }
         }
         
@@ -213,31 +273,8 @@ class SBoxAnalyzer {
         
         return {
             maxBias: maxBias,
-            maxLAP: maxLAP,
-            table: this.linearApproxTable
+            maxLAP: maxLAP
         };
-    }
-
-    // Build Linear Approximation Table
-    buildLinearApproximationTable() {
-        this.linearApproxTable = Array(this.size).fill().map(() => Array(this.size).fill(0));
-        
-        for (let a = 0; a < this.size; a++) {
-            for (let b = 0; b < this.size; b++) {
-                let count = 0;
-                
-                for (let x = 0; x < this.size; x++) {
-                    const inputParity = this.hammingWeights[a & x] & 1;
-                    const outputParity = this.hammingWeights[b & this.sbox[x]] & 1;
-                    
-                    if (inputParity === outputParity) {
-                        count++;
-                    }
-                }
-                
-                this.linearApproxTable[a][b] = count - (this.size / 2); // Bias
-            }
-        }
     }
 
     // 6. Differential Approximation Probability (DAP)
@@ -329,87 +366,93 @@ class SBoxAnalyzer {
 
     // 9. Transparency Order (TO) - Critical implementation for 8-bit S-boxes
     calculateTransparencyOrder() {
-        let maxOrder = 0;
+        const n = this.n;
+        const M = this.size;
+        let maxTO = -Infinity;
         
-        // For each pair of distinct input bits
-        for (let i = 0; i < this.n; i++) {
-            for (let j = i + 1; j < this.n; j++) {
-                // For each subset of output bits
-                for (let outputMask = 1; outputMask < this.size; outputMask++) {
-                    const order = this.computeTransparencyOrderForMask(i, j, outputMask);
-                    maxOrder = Math.max(maxOrder, order);
+        const sumAbsWhtBeta = new Array(M).fill(0);
+        
+        // Precompute sum of absolute WHT values
+        for (let a = 1; a < M; a++) {
+            const f = new Array(M);
+            for (let x = 0; x < M; x++) {
+                const val = this.sbox[x];
+                let dotProd = 0;
+                let temp = a & val;
+                while (temp) {
+                    dotProd ^= (temp & 1);
+                    temp >>= 1;
                 }
+                f[x] = dotProd === 0 ? 0 : 1;
+            }
+            
+            const wht = this.walshHadamardTransform(f);
+            
+            for (let beta = 1; beta < M; beta++) {
+                sumAbsWhtBeta[beta] += Math.abs(wht[beta]);
             }
         }
         
-        return maxOrder;
-    }
-
-    // Compute transparency order for specific input bits and output mask
-    computeTransparencyOrderForMask(inputBit1, inputBit2, outputMask) {
-        const contingencyTable = Array(4).fill().map(() => Array(256).fill(0));
+        const factor = 1.0 / (M * (M - 1));
         
-        // Build contingency table
-        for (let x = 0; x < this.size; x++) {
-            const bit1 = (x >> inputBit1) & 1;
-            const bit2 = (x >> inputBit2) & 1;
-            const index = (bit1 << 1) | bit2; // 00, 01, 10, 11
-            
-            const output = this.sbox[x];
-            const maskedOutput = this.hammingWeights[output & outputMask] & 1;
-            
-            contingencyTable[index][maskedOutput]++;
-        }
-        
-        // Calculate transparency order using chi-squared statistic
-        let chiSquared = 0;
-        const expected = this.size / 8; // Expected frequency for each cell
-        
-        for (let i = 0; i < 4; i++) {
-            for (let j = 0; j < 2; j++) {
-                const observed = contingencyTable[i][j];
-                if (expected > 0) {
-                    chiSquared += Math.pow(observed - expected, 2) / expected;
-                }
+        for (let beta = 1; beta < M; beta++) {
+            const wtBeta = this.hammingWeights[beta];
+            const term = n - 2 * wtBeta - factor * sumAbsWhtBeta[beta];
+            if (term > maxTO) {
+                maxTO = term;
             }
         }
         
-        // Transparency order is related to chi-squared value
-        // Higher chi-squared indicates higher transparency order
-        return Math.sqrt(chiSquared);
+        return maxTO;
     }
 
     // 10. Correlation Immunity (CI)
     calculateCorrelationImmunity() {
         let maxCI = 0;
         
+        // Check each output bit function
+        // The CI of the S-box is the minimum CI of its component functions
+        let minComponentCI = this.n;
+
         for (let bit = 0; bit < this.n; bit++) {
             const truthTable = this.getBooleanFunction(bit);
             const walsh = this.walshHadamardTransform(truthTable);
             
-            // Find highest weight input for which Walsh coefficient is zero
             let ci = 0;
-            for (let weight = 1; weight <= this.n; weight++) {
-                let hasZeroWalsh = false;
+            // Check orders 1 up to n
+            for (let m = 1; m <= this.n; m++) {
+                let allZero = true;
                 
-                for (let mask = 0; mask < this.size; mask++) {
-                    if (this.hammingWeights[mask] === weight && walsh[mask] === 0) {
-                        hasZeroWalsh = true;
-                        break;
+                // Check all masks with weight m
+                for (let mask = 1; mask < this.size; mask++) {
+                    if (this.hammingWeights[mask] === m) {
+                        if (walsh[mask] !== 0) {
+                            allZero = false;
+                            break;
+                        }
                     }
                 }
                 
-                if (hasZeroWalsh) {
-                    ci = weight;
+                if (allZero) {
+                    ci = m;
                 } else {
-                    break;
+                    break; // If it fails for weight m, it can't be CI m
                 }
             }
             
-            maxCI = Math.max(maxCI, ci);
+            minComponentCI = Math.min(minComponentCI, ci);
         }
         
-        return maxCI;
+        return minComponentCI;
+    }
+
+    // 11. Bijectivity (Permutation Check)
+    calculateBijectivity() {
+        if (!this.sbox || this.sbox.length !== 256) {
+            return false;
+        }
+        const seen = new Set(this.sbox);
+        return seen.size === 256;
     }
 
     // Helper method to check if S-box is balanced
@@ -423,8 +466,7 @@ class SBoxAnalyzer {
 
     // Helper method to check if S-box is a bijection
     isBijection() {
-        const seen = new Set(this.sbox);
-        return seen.size === this.size;
+        return this.calculateBijectivity();
     }
 
     // Main analysis function - returns all cryptographic properties
@@ -442,44 +484,49 @@ class SBoxAnalyzer {
             // Basic properties (fast)
             console.log('Calculating basic properties...');
             
-            // Non-linearity
+            // 1. Bijectivity
+            console.log('Calculating Bijectivity...');
+            results.bijectivity = this.calculateBijectivity();
+
+            // 2. Non-linearity
             console.log('Calculating Non-linearity...');
             results.nonlinearity = this.calculateNonlinearity();
             
-            // SAC
+            // 3. SAC
             console.log('Calculating SAC...');
             results.sac = this.calculateSAC();
             
-            // Differential Uniformity
-            console.log('Calculating Differential Uniformity...');
-            results.differentialUniformity = this.calculateDifferentialUniformity();
-            
-            // Algebraic Degree
-            console.log('Calculating Algebraic Degree...');
-            results.algebraicDegree = this.calculateAlgebraicDegree();
-            
-            // Linear Approximation Probability
-            console.log('Calculating LAP...');
-            results.lap = this.calculateLAP();
-            
-            // Differential Approximation Probability
-            console.log('Calculating DAP...');
-            results.dap = this.calculateDAP();
-            
-            // BIC properties
+            // 4. BIC-NL
             console.log('Calculating BIC-NL...');
             results.bicNL = this.calculateBIC_NL();
-            
+
+            // 5. BIC-SAC
             console.log('Calculating BIC-SAC...');
             results.bicSAC = this.calculateBIC_SAC();
             
-            // Correlation Immunity
-            console.log('Calculating Correlation Immunity...');
-            results.correlationImmunity = this.calculateCorrelationImmunity();
+            // 6. LAP
+            console.log('Calculating LAP...');
+            results.lap = this.calculateLAP();
             
-            // Transparency Order (computationally intensive)
+            // 7. DAP
+            console.log('Calculating DAP...');
+            results.dap = this.calculateDAP();
+
+            // 8. Differential Uniformity
+            console.log('Calculating Differential Uniformity...');
+            results.differentialUniformity = this.calculateDifferentialUniformity();
+            
+            // 9. Algebraic Degree
+            console.log('Calculating Algebraic Degree...');
+            results.algebraicDegree = this.calculateAlgebraicDegree();
+            
+            // 10. Transparency Order (computationally intensive)
             console.log('Calculating Transparency Order...');
             results.transparencyOrder = await this.calculateTransparencyOrderAsync();
+
+            // 11. Correlation Immunity
+            console.log('Calculating Correlation Immunity...');
+            results.correlationImmunity = this.calculateCorrelationImmunity();
             
             console.log('Analysis complete!');
             

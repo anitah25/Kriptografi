@@ -13,6 +13,7 @@ class SBoxDashboard {
     init() {
         this.setupEventListeners();
         this.initializeGrid();
+        this.populateAffineMatrices();
         this.updateStatus('No S-box loaded');
     }
 
@@ -31,6 +32,11 @@ class SBoxDashboard {
         // Load standard AES S-box
         document.getElementById('loadStandardSbox').addEventListener('click', () => {
             this.loadStandardAESSBox();
+        });
+
+        // Generate Affine S-box
+        document.getElementById('generateAffineSbox').addEventListener('click', () => {
+            this.generateAffineSBox();
         });
 
         // Clear S-box
@@ -252,6 +258,196 @@ class SBoxDashboard {
         console.log('S-box validation passed! Valid permutation detected.');
     }
 
+    // Generate S-Box using Affine Transformation (AES Construction)
+    populateAffineMatrices() {
+        const select = document.getElementById('affineMatrixSelect');
+        if (!select) return;
+        
+        select.innerHTML = '';
+        this.affineMatrices = []; // Store the seeds
+        
+        let count = 0;
+        for (let i = 1; i < 256; i++) {
+            if (this.isMatrixInvertible(i)) {
+                count++;
+                this.affineMatrices.push(i);
+                const option = document.createElement('option');
+                option.value = i;
+                // Format as "K1: 0x01 (00000001)"
+                const hex = i.toString(16).toUpperCase().padStart(2, '0');
+                const bin = i.toString(2).padStart(8, '0');
+                option.textContent = `K${count}: 0x${hex} (${bin})`;
+                select.appendChild(option);
+            }
+        }
+        
+        // Default to K1
+        if (select.options.length > 0) {
+            select.selectedIndex = 0;
+        }
+    }
+
+    isMatrixInvertible(seed) {
+        // Create 8x8 matrix from seed (circulant with Rotate Right)
+        let matrix = [];
+        let row = seed;
+        for (let i = 0; i < 8; i++) {
+            matrix.push(row);
+            // Rotate right for next row (Paper's method)
+            row = ((row >>> 1) | (row << 7)) & 0xFF;
+        }
+        
+        // Gaussian elimination over GF(2)
+        let n = 8;
+        let m = [...matrix]; // Copy
+        
+        for (let i = 0; i < n; i++) {
+            // Find pivot
+            let pivot = -1;
+            for (let j = i; j < n; j++) {
+                if ((m[j] >> i) & 1) { // Check bit i (LSB aligned with column i)
+                    pivot = j;
+                    break;
+                }
+            }
+            
+            if (pivot === -1) return false; // Singular
+            
+            // Swap rows
+            [m[i], m[pivot]] = [m[pivot], m[i]];
+            
+            // Eliminate
+            for (let j = 0; j < n; j++) {
+                if (i !== j && ((m[j] >> i) & 1)) {
+                    m[j] ^= m[i];
+                }
+            }
+        }
+        
+        return true;
+    }
+
+    generateAffineSBox() {
+        try {
+            const select = document.getElementById('affineMatrixSelect');
+            const seed = parseInt(select.value);
+            
+            const constantInput = document.getElementById('affineConstant');
+            const constant = parseInt(constantInput.value, 16);
+            
+            if (isNaN(seed)) {
+                alert('Please select an affine matrix first.');
+                return;
+            }
+            
+            if (isNaN(constant)) {
+                alert('Invalid additive constant. Please enter a hex value.');
+                return;
+            }
+
+            const sbox = new Array(256);
+            
+            for (let i = 0; i < 256; i++) {
+                // 1. Multiplicative Inverse in GF(2^8)
+                let inverse = this.gf28Inverse(i);
+                
+                // 2. Affine Transformation with selected matrix and constant
+                sbox[i] = this.affineTransform(inverse, seed, constant);
+            }
+            
+            this.currentSBox = sbox;
+            this.renderSBoxGrid(sbox);
+            
+            const kIndex = this.affineMatrices.indexOf(seed) + 1;
+            const constHex = constant.toString(16).toUpperCase().padStart(2, '0');
+            this.updateStatus(`Generated using Affine Matrix K${kIndex} + 0x${constHex}`);
+            this.saveSBoxToStorage(sbox, `affine_K${kIndex}_${constHex}`);
+            
+        } catch (error) {
+            console.error('Error generating affine S-box:', error);
+            alert('Error generating S-box');
+        }
+    }
+
+    // Calculate multiplicative inverse in GF(2^8)
+    gf28Inverse(b) {
+        if (b === 0) return 0;
+        // Using exponentiation: a^-1 = a^254 in GF(2^8)
+        return this.gf28Pow(b, 254);
+    }
+
+    // GF(2^8) multiplication
+    gf28Mul(a, b) {
+        let p = 0;
+        for (let i = 0; i < 8; i++) {
+            if ((b & 1) !== 0) {
+                p ^= a;
+            }
+            let hiBitSet = (a & 0x80) !== 0;
+            a = (a << 1) & 0xFF;
+            if (hiBitSet) {
+                a ^= 0x1B; // x^8 + x^4 + x^3 + x + 1 reduced
+            }
+            b >>= 1;
+        }
+        return p & 0xFF;
+    }
+
+    // GF(2^8) exponentiation
+    gf28Pow(base, exp) {
+        let res = 1;
+        while (exp > 0) {
+            if ((exp & 1) !== 0) {
+                res = this.gf28Mul(res, base);
+            }
+            base = this.gf28Mul(base, base);
+            exp >>= 1;
+        }
+        return res;
+    }
+
+    // Bit reverse an 8-bit value
+    bitReverse(b) {
+        let result = 0;
+        for (let i = 0; i < 8; i++) {
+            if (b & (1 << i)) {
+                result |= (1 << (7 - i));
+            }
+        }
+        return result;
+    }
+
+    // Affine Transformation
+    affineTransform(b, seed, constant = 0x63) {
+        // The paper uses matrix notation where column 0 is LEFTMOST
+        // But binary integers store bit 0 as RIGHTMOST
+        // So we need to bit-reverse the input for correct multiplication
+        let bRev = this.bitReverse(b);
+        
+        let result = 0;
+        let row = seed; // Row 0
+        
+        for (let i = 0; i < 8; i++) {
+            // Calculate parity of (row & bRev)
+            let product = row & bRev;
+            let parity = 0;
+            while (product) {
+                parity ^= (product & 1);
+                product >>= 1;
+            }
+            
+            if (parity) {
+                result |= (1 << i); // Set bit i
+            }
+            
+            // Rotate row right for next bit
+            row = ((row >>> 1) | (row << 7)) & 0xFF;
+        }
+        
+        // XOR with constant
+        return (result ^ constant) & 0xFF;
+    }
+
     // Generate random S-box
     generateRandomSBox() {
         // Create array with values 0-255
@@ -281,16 +477,16 @@ class SBoxDashboard {
             0x04, 0xc7, 0x23, 0xc3, 0x18, 0x96, 0x05, 0x9a, 0x07, 0x12, 0x80, 0xe2, 0xeb, 0x27, 0xb2, 0x75,
             0x09, 0x83, 0x2c, 0x1a, 0x1b, 0x6e, 0x5a, 0xa0, 0x52, 0x3b, 0xd6, 0xb3, 0x29, 0xe3, 0x2f, 0x84,
             0x53, 0xd1, 0x00, 0xed, 0x20, 0xfc, 0xb1, 0x5b, 0x6a, 0xcb, 0xbe, 0x39, 0x4a, 0x4c, 0x58, 0xcf,
-            0xd0, 0xef, 0xaa, 0xfb, 0x43, 0x4d, 0x33, 0x67, 0x85, 0x45, 0xf9, 0x02, 0x7f, 0x50, 0x3c, 0x9f,
-            0xa8, 0x51, 0xa3, 0x40, 0x8f, 0x92, 0x9d, 0x38, 0xf5, 0xbc, 0xb6, 0xda, 0x21, 0x10, 0xff, 0xf3,
-            0xd2, 0xcd, 0x0c, 0x13, 0xec, 0x5f, 0x97, 0x44, 0x17, 0xc4, 0xa7, 0x7e, 0x3d, 0x64, 0x5d, 0x19,
-            0x73, 0x60, 0x81, 0x4f, 0xdc, 0x22, 0x2a, 0x90, 0x88, 0x46, 0xee, 0xb8, 0x14, 0xde, 0x5e, 0x0b,
-            0xdb, 0xe0, 0x32, 0x3a, 0x0a, 0x49, 0x06, 0x24, 0x5c, 0xc2, 0xd3, 0xac, 0x62, 0x91, 0x95, 0xe4,
-            0x79, 0xe7, 0xc8, 0x37, 0x6d, 0x8d, 0xd5, 0x4e, 0xa9, 0x6c, 0x56, 0xf4, 0xea, 0x65, 0x7a, 0xae,
-            0x08, 0xba, 0x78, 0x25, 0x2e, 0x1c, 0xa6, 0xb4, 0xc6, 0xe8, 0xdd, 0x74, 0x1f, 0x4b, 0xbd, 0x8b,
-            0x8a, 0x70, 0x3e, 0xb5, 0x66, 0x48, 0x03, 0xf6, 0x0e, 0x61, 0x35, 0x57, 0xb9, 0x86, 0xc1, 0x1d,
-            0x9e, 0xe1, 0xf8, 0x98, 0x11, 0x69, 0xd9, 0x8e, 0x94, 0x9b, 0x1e, 0x87, 0xe9, 0xce, 0x55, 0x28,
-            0xdf, 0x8c, 0xa1, 0x89, 0x0d, 0xbf, 0xe6, 0x42, 0x68, 0x41, 0x99, 0x2d, 0x0f, 0xb0, 0x54, 0xbb
+            0xd0, 0xef, 0xaa, 0xfb, 0x43, 0x4d, 0x33, 0x85, 0x45, 0xf9, 0x02, 0x7f, 0x50, 0x3c, 0x9f, 0xa8,
+            0x51, 0xa3, 0x40, 0x8f, 0x92, 0x9d, 0x38, 0xf5, 0xbc, 0xb6, 0xda, 0x21, 0x10, 0xff, 0xf3, 0xd2,
+            0xcd, 0x0c, 0x13, 0xec, 0x5f, 0x97, 0x44, 0x17, 0xc4, 0xa7, 0x7e, 0x3d, 0x64, 0x5d, 0x19, 0x73,
+            0x60, 0x81, 0x4f, 0xdc, 0x22, 0x2a, 0x90, 0x88, 0x46, 0xee, 0xb8, 0x14, 0xde, 0x5e, 0x0b, 0xdb,
+            0xe0, 0x32, 0x3a, 0x0a, 0x49, 0x06, 0x24, 0x5c, 0xc2, 0xd3, 0xac, 0x62, 0x91, 0x95, 0xe4, 0x79,
+            0xe7, 0xc8, 0x37, 0x6d, 0x8d, 0xd5, 0x4e, 0xa9, 0x6c, 0x56, 0xf4, 0xea, 0x65, 0x7a, 0xae, 0x08,
+            0xba, 0x78, 0x25, 0x2e, 0x1c, 0xa6, 0xb4, 0xc6, 0xe8, 0xdd, 0x74, 0x1f, 0x4b, 0xbd, 0x8b, 0x8a,
+            0x70, 0x3e, 0xb5, 0x66, 0x48, 0x03, 0xf6, 0x0e, 0x61, 0x35, 0x57, 0xb9, 0x86, 0xc1, 0x1d, 0x9e,
+            0xe1, 0xf8, 0x98, 0x11, 0x69, 0xd9, 0x8e, 0x94, 0x9b, 0x1e, 0x87, 0xe9, 0xce, 0x55, 0x28, 0xdf,
+            0x8c, 0xa1, 0x89, 0x0d, 0xbf, 0xe6, 0x42, 0x68, 0x41, 0x99, 0x2d, 0x0f, 0xb0, 0x54, 0xbb, 0x16
         ];
         
         this.currentSBox = standardSBox;
@@ -313,34 +509,34 @@ class SBoxDashboard {
         fileInfo.classList.remove('show', 'success', 'error');
         fileInfo.textContent = '';
         
+        // Hide heatmap legend
+        const legend = document.getElementById('heatmapLegend');
+        if (legend) {
+            legend.style.display = 'none';
+        }
+        
         // Remove from localStorage
         localStorage.removeItem('currentSBox');
+        
+        // Show toast
+        if (window.showToast) {
+            window.showToast('S-Box cleared', 'info');
+        }
     }
 
     // Initialize empty 16x16 grid
     initializeGrid() {
         const grid = document.getElementById('sboxGrid');
-        grid.innerHTML = '';
-        
-        // Create header row (column indices)
-        grid.appendChild(this.createCell('', 'header')); // Empty corner cell
-        for (let col = 0; col < 16; col++) {
-            grid.appendChild(this.createCell(col.toString(16).toUpperCase(), 'header'));
+        // Clear all content including text nodes
+        while (grid.firstChild) {
+            grid.removeChild(grid.firstChild);
         }
         
-        // Create data rows
-        for (let row = 0; row < 16; row++) {
-            // Row header
-            const rowHeader = row.toString(16).toUpperCase() + '0';
-            grid.appendChild(this.createCell(rowHeader, 'header'));
-            
-            // Data cells
-            for (let col = 0; col < 16; col++) {
-                const index = row * 16 + col;
-                const cell = this.createCell('--', 'empty');
-                cell.setAttribute('data-index', index);
-                grid.appendChild(cell);
-            }
+        // Create exactly 256 cells (16x16)
+        for (let i = 0; i < 256; i++) {
+            const cell = this.createCell('--', 'empty');
+            cell.setAttribute('data-index', i);
+            grid.appendChild(cell);
         }
     }
 
@@ -352,7 +548,7 @@ class SBoxDashboard {
         return cell;
     }
 
-    // Render S-box array into 16x16 grid
+    // Render S-box array into 16x16 grid with heatmap coloring
     renderSBoxGrid(sboxArray) {
         console.log('renderSBoxGrid called with array length:', sboxArray ? sboxArray.length : 'null');
         console.log('First 10 values to render:', sboxArray ? sboxArray.slice(0, 10) : 'null');
@@ -367,12 +563,17 @@ class SBoxDashboard {
         
         console.log('Found grid cells:', dataCells.length);
         
-        // Update each data cell
+        // Update each data cell with heatmap coloring
         dataCells.forEach((cell, index) => {
             const value = sboxArray[index];
             cell.textContent = value.toString(16).padStart(2, '0').toUpperCase();
             cell.className = 'grid-cell data';
             cell.setAttribute('data-value', value);
+            
+            // Apply heatmap coloring based on value
+            const heatmapColor = this.getHeatmapColor(value);
+            cell.style.backgroundColor = heatmapColor.bg;
+            cell.style.color = heatmapColor.text;
             
             // Add tooltip with decimal and hex values
             cell.title = `Index: ${index} (0x${index.toString(16).padStart(2, '0')}) → Value: ${value} (0x${value.toString(16).padStart(2, '0')})`;
@@ -383,6 +584,61 @@ class SBoxDashboard {
         
         this.isLoaded = true;
         console.log('Grid rendering completed, isLoaded:', this.isLoaded);
+        
+        // Show heatmap legend
+        const legend = document.getElementById('heatmapLegend');
+        if (legend) {
+            legend.style.display = 'flex';
+        }
+        
+        // Show toast notification
+        if (window.showToast) {
+            window.showToast('S-Box loaded successfully!', 'success');
+        }
+    }
+    
+    // Generate heatmap color based on S-box value (0-255)
+    getHeatmapColor(value) {
+        // Normalize value to 0-1
+        const normalized = value / 255;
+        
+        // Color gradient: Blue (low) -> Green (mid) -> Yellow -> Red (high)
+        let r, g, b;
+        
+        if (normalized < 0.25) {
+            // Blue to Cyan
+            const t = normalized / 0.25;
+            r = Math.round(240 + (224 - 240) * t);
+            g = Math.round(248 + (242 - 248) * t);
+            b = Math.round(255 + (246 - 255) * t);
+        } else if (normalized < 0.5) {
+            // Cyan to Green
+            const t = (normalized - 0.25) / 0.25;
+            r = Math.round(224 + (220 - 224) * t);
+            g = Math.round(242 + (252 - 242) * t);
+            b = Math.round(246 + (231 - 246) * t);
+        } else if (normalized < 0.75) {
+            // Green to Yellow/Orange
+            const t = (normalized - 0.5) / 0.25;
+            r = Math.round(220 + (254 - 220) * t);
+            g = Math.round(252 + (240 - 252) * t);
+            b = Math.round(231 + (217 - 231) * t);
+        } else {
+            // Yellow/Orange to Red/Pink
+            const t = (normalized - 0.75) / 0.25;
+            r = Math.round(254 + (254 - 254) * t);
+            g = Math.round(240 + (215 - 240) * t);
+            b = Math.round(217 + (215 - 217) * t);
+        }
+        
+        // Determine text color based on background brightness
+        const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+        const textColor = brightness > 128 ? '#1e293b' : '#ffffff';
+        
+        return {
+            bg: `rgb(${r}, ${g}, ${b})`,
+            text: textColor
+        };
     }
 
     // Show cell details (optional feature)
@@ -534,14 +790,18 @@ Output: 0x${value.toString(16).padStart(2, '0')} (${value})`);
     // Run cryptographic analysis
     async runAnalysis() {
         if (!this.currentSBox) {
-            alert('Please load an S-box before running analysis');
+            if (window.showToast) {
+                window.showToast('Please load an S-box before running analysis', 'warning');
+            } else {
+                alert('Please load an S-box before running analysis');
+            }
             return;
         }
 
         try {
             // Update status to analyzing
             const statusEl = document.getElementById('analysisStatus');
-            statusEl.textContent = 'Running cryptographic analysis... This may take a moment.';
+            statusEl.innerHTML = '<span class="loading-spinner"></span> Running cryptographic analysis... This may take a moment.';
             statusEl.className = 'analysis-status analyzing';
 
             // Create analyzer instance
@@ -557,11 +817,16 @@ Output: 0x${value.toString(16).padStart(2, '0')} (${value})`);
             this.displayAnalysisResults(results, summary);
             
             // Update status
-            statusEl.textContent = 'Analysis complete!';
+            statusEl.innerHTML = '✅ Analysis complete!';
             statusEl.className = 'analysis-status complete';
             
             // Store results for export
             this.analysisResults = { results, summary };
+            
+            // Show toast notification
+            if (window.showToast) {
+                window.showToast('Analysis completed successfully!', 'success');
+            }
             
             console.log('Analysis Results:', results);
             
@@ -580,13 +845,16 @@ Output: 0x${value.toString(16).padStart(2, '0')} (${value})`);
         document.getElementById('analysisResults').style.display = 'block';
         
         // Update individual values with color coding
+        this.updateResultValue('bijectivityValue', results.bijectivity ? 'Yes' : 'No', (val) => val === 'Yes');
         this.updateResultValue('nlValue', results.nonlinearity, (val) => val >= 100);
+        this.updateResultValue('sacValue', results.sac.score.toFixed(4), (val) => Math.abs(val - 0.5) <= 0.05);
+        this.updateResultValue('bicNlValue', results.bicNL.minNonlinearity, (val) => val >= 100);
+        this.updateResultValue('bicSacValue', results.bicSAC.averageSAC.toFixed(4), (val) => Math.abs(val - 0.5) <= 0.05);
+        this.updateResultValue('lapValue', results.lap.maxLAP.toFixed(4), (val) => val <= 0.0625);
+        this.updateResultValue('dapValue', results.dap.maxDAP.toFixed(6), (val) => val <= 0.016); // 4/256 approx
         this.updateResultValue('duValue', results.differentialUniformity, (val) => val <= 4);
-        this.updateResultValue('sacValue', results.sac.score.toFixed(4), (val) => val <= 0.1);
-        this.updateResultValue('lapValue', results.lap.maxBias, (val) => val <= 32);
-        this.updateResultValue('adValue', results.algebraicDegree, (val) => val >= 6);
+        this.updateResultValue('adValue', results.algebraicDegree, (val) => val >= 7);
         this.updateResultValue('toValue', results.transparencyOrder ? results.transparencyOrder.toFixed(2) : 'N/A', () => true);
-        this.updateResultValue('bicNlValue', results.bicNL.minNonlinearity, (val) => val >= 50);
         this.updateResultValue('ciValue', results.correlationImmunity, (val) => val >= 1);
         
         // Display security summary
@@ -600,10 +868,12 @@ Output: 0x${value.toString(16).padStart(2, '0')} (${value})`);
         
         // Apply color coding based on quality
         element.className = 'result-value';
-        if (typeof value === 'number') {
-            if (isGoodFunction(value)) {
+        
+        const numValue = parseFloat(value);
+        if (!isNaN(numValue)) {
+            if (isGoodFunction(numValue)) {
                 element.classList.add('good');
-            } else if (value > 0) {
+            } else if (numValue > 0) {
                 element.classList.add('warning');
             } else {
                 element.classList.add('poor');
