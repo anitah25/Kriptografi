@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>S-Box Analysis Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- SheetJS library for Excel file parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+    <div class="dashboard">
+        <header class="header">
+            <h1>S-Box Analysis Dashboard</h1>
+            <p>Upload, generate, and analyze AES S-boxes</p>
+        </header>
+
+        <main class="main-content">
+            <!-- S-Box Input Section -->
+            <section class="input-section">
+                <h2>S-Box Input</h2>
+                
+                <div class="input-controls">
+                    <!-- Upload S-box -->
+                    <div class="control-group">
+                        <h3>Upload S-box</h3>
+                        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" class="file-input">
+                        <label for="fileInput" class="btn btn-primary">Upload S-box (Excel/CSV)</label>
+                        <div class="file-info" id="fileInfo"></div>
+                    </div>
+                    
+                    <!-- Generate Random S-box -->
+                    <div class="control-group">
+                        <h3>Generate S-box</h3>
+                        <button id="generateRandomSbox" class="btn btn-secondary">Generate Random S-box</button>
+                        <button id="loadStandardSbox" class="btn btn-secondary">Load Standard AES S-box</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- S-Box Display Section -->
+            <section class="display-section">
+                <h2>Current S-Box</h2>
+                <div class="sbox-info">
+                    <span id="sboxStatus">No S-box loaded</span>
+                    <button id="clearSbox" class="btn btn-small">Clear</button>
+                </div>
+                
+                <!-- 16x16 Hexadecimal Grid -->
+                <div class="sbox-container">
+                    <div class="sbox-grid" id="sboxGrid">
+                        <!-- Grid will be populated by JavaScript -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Analysis Section -->
+            <section class="analysis-section">
+                <h2>Cryptographic Analysis</h2>
+                
+                <div class="analysis-controls">
+                    <button id="runAnalysis" class="btn btn-primary">Run Full Analysis</button>
+                    <button id="exportAnalysis" class="btn btn-secondary">Export Results</button>
+                    <button id="clearAnalysis" class="btn btn-secondary">Clear Results</button>
+                </div>
+                
+                <div class="analysis-status" id="analysisStatus">
+                    <span>No analysis performed yet</span>
+                </div>
+                
+                <!-- Analysis Results -->
+                <div class="analysis-results" id="analysisResults" style="display: none;">
+                    <div class="results-grid">
+                        <div class="result-card">
+                            <h4>Non-Linearity (NL)</h4>
+                            <div class="result-value" id="nlValue">-</div>
+                            <div class="result-description">Resistance to linear cryptanalysis</div>
+                        </div>
+                        
+                        <div class="result-card">
+                            <h4>Differential Uniformity (DU)</h4>
+                            <div class="result-value" id="duValue">-</div>
+                            <div class="result-description">Resistance to differential cryptanalysis</div>
+                        </div>
+                        
+                        <div class="result-card">
+                            <h4>SAC Score</h4>
+                            <div class="result-value" id="sacValue">-</div>
+                            <div class="result-description">Strict Avalanche Criterion</div>
+                        </div>
+                        
+                        <div class="result-card">
+                            <h4>Linear Bias (Max)</h4>
+                            <div class="result-value" id="lapValue">-</div>
+                            <div class="result-description">Maximum linear approximation bias</div>
+                        </div>
+                        
+                        <div class="result-card">
+                            <h4>Algebraic Degree (AD)</h4>
+                            <div class="result-value" id="adValue">-</div>
+                            <div class="result-description">Polynomial complexity</div>
+                        </div>
+                        
+                        <div class="result-card">
+                            <h4>Transparency Order (TO)</h4>
+                            <div class="result-value" id="toValue">-</div>
+                            <div class="result-description">Higher-order statistical properties</div>
+                        </div>
+                        
+                        <div class="result-card">
+                            <h4>BIC-NL</h4>
+                            <div class="result-value" id="bicNlValue">-</div>
+                            <div class="result-description">Bit Independence (Nonlinearity)</div>
+                        </div>
+                        
+                        <div class="result-card">
+                            <h4>Correlation Immunity (CI)</h4>
+                            <div class="result-value" id="ciValue">-</div>
+                            <div class="result-description">Resistance to correlation attacks</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Security Summary -->
+                    <div class="security-summary" id="securitySummary">
+                        <!-- Summary will be populated by JavaScript -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Simulation Lab -->
+            <section id="simulation-section" class="section">
+                <h2>🧪 AES Simulation Lab</h2>
+                <div class="simulation-container">
+                    <!-- Input Configuration -->
+                    <div class="simulation-inputs">
+                        <!-- Input Mode Selection -->
+                        <div class="input-mode-selector">
+                            <label>Input Mode:</label>
+                            <div class="mode-buttons">
+                                <button id="mode-text" class="mode-btn active">📝 Text Mode</button>
+                                <button id="mode-hex" class="mode-btn">🔢 Hex Mode</button>
+                            </div>
+                        </div>
+                        
+                        <!-- Text Mode Inputs -->
+                        <div id="text-mode-inputs" class="input-mode-content">
+                            <div class="input-group">
+                                <label for="plaintext-text">Plaintext (Text):</label>
+                                <input type="text" id="plaintext-text" placeholder="Hello World!" maxlength="16">
+                                <span class="input-hint">Enter up to 16 characters (will be padded if shorter)</span>
+                            </div>
+                            
+                            <div class="input-group">
+                                <label for="key-text">Key (Text):</label>
+                                <input type="text" id="key-text" placeholder="MySecretKey123" maxlength="16">
+                                <span class="input-hint">Enter up to 16 characters (will be padded if shorter)</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Hex Mode Inputs -->
+                        <div id="hex-mode-inputs" class="input-mode-content" style="display: none;">
+                            <div class="input-group">
+                                <label for="plaintext-input">Plaintext (16 bytes hex):</label>
+                                <input type="text" id="plaintext-input" placeholder="32 43 f6 a8 88 5a 30 8d 31 31 98 a2 e0 37 07 34" maxlength="47">
+                                <span class="input-hint">Enter 16 hex bytes separated by spaces</span>
+                            </div>
+                            
+                            <div class="input-group">
+                                <label for="key-input">Key (16 bytes hex):</label>
+                                <input type="text" id="key-input" placeholder="2b 7e 15 16 28 ae d2 a6 ab f7 15 88 09 cf 4f 3c" maxlength="47">
+                                <span class="input-hint">Enter 16 hex bytes separated by spaces</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Preview of converted values -->
+                        <div class="conversion-preview" id="conversion-preview" style="display: none;">
+                            <h4>Converted Values:</h4>
+                            <div class="preview-item">
+                                <span class="preview-label">Plaintext (Hex):</span>
+                                <span class="preview-value" id="preview-plaintext">-</span>
+                            </div>
+                            <div class="preview-item">
+                                <span class="preview-label">Key (Hex):</span>
+                                <span class="preview-value" id="preview-key">-</span>
+                            </div>
+                        </div>
+                        
+                        <div class="simulation-controls">
+                            <button id="sim-start" class="btn-primary">🎬 Start Simulation</button>
+                            <button id="sim-prev" class="btn-secondary" disabled>⏪ Previous Step</button>
+                            <button id="sim-next" class="btn-secondary" disabled>⏩ Next Step</button>
+                            <button id="sim-reset" class="btn-secondary">🔄 Reset</button>
+                        </div>
+                    </div>
+
+                    <!-- Visualization Area -->
+                    <div class="simulation-visual">
+                        <!-- Current Operation Display -->
+                        <div class="operation-display">
+                            <div class="operation-info">
+                                <div class="operation-name" id="current-operation">Ready to Start</div>
+                                <div class="operation-round" id="current-round">Round: -</div>
+                                <div class="operation-progress" id="operation-progress">Progress: 0%</div>
+                            </div>
+                            <div class="s-box-indicator" id="sbox-indicator">
+                                <span class="indicator-label">Using S-box:</span>
+                                <span class="indicator-type" id="sbox-type">Standard AES</span>
+                            </div>
+                        </div>
+
+                        <!-- State Matrix Display -->
+                        <div class="state-matrix-container">
+                            <h3>AES State Matrix</h3>
+                            <div class="matrix-wrapper">
+                                <div class="state-matrix" id="state-matrix">
+                                    <!-- 4x4 grid will be generated here -->
+                                    <div class="matrix-cell" data-pos="0,0">00</div>
+                                    <div class="matrix-cell" data-pos="0,1">00</div>
+                                    <div class="matrix-cell" data-pos="0,2">00</div>
+                                    <div class="matrix-cell" data-pos="0,3">00</div>
+                                    <div class="matrix-cell" data-pos="1,0">00</div>
+                                    <div class="matrix-cell" data-pos="1,1">00</div>
+                                    <div class="matrix-cell" data-pos="1,2">00</div>
+                                    <div class="matrix-cell" data-pos="1,3">00</div>
+                                    <div class="matrix-cell" data-pos="2,0">00</div>
+                                    <div class="matrix-cell" data-pos="2,1">00</div>
+                                    <div class="matrix-cell" data-pos="2,2">00</div>
+                                    <div class="matrix-cell" data-pos="2,3">00</div>
+                                    <div class="matrix-cell" data-pos="3,0">00</div>
+                                    <div class="matrix-cell" data-pos="3,1">00</div>
+                                    <div class="matrix-cell" data-pos="3,2">00</div>
+                                    <div class="matrix-cell" data-pos="3,3">00</div>
+                                </div>
+                                <div class="matrix-labels">
+                                    <div class="row-labels">
+                                        <span>Row 0</span>
+                                        <span>Row 1</span>
+                                        <span>Row 2</span>
+                                        <span>Row 3</span>
+                                    </div>
+                                    <div class="col-labels">
+                                        <span>Col 0</span>
+                                        <span>Col 1</span>
+                                        <span>Col 2</span>
+                                        <span>Col 3</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Step History -->
+                        <div class="step-history">
+                            <h4>Step History</h4>
+                            <div class="history-list" id="history-list">
+                                <div class="history-item">No steps yet</div>
+                            </div>
+                        </div>
+
+                        <!-- Encryption Results -->
+                        <div class="encryption-results" id="encryption-results" style="display: none;">
+                            <h4>🔐 Encryption Result</h4>
+                            <div class="result-display">
+                                <div class="result-item">
+                                    <span class="result-label">Original Text:</span>
+                                    <span class="result-value" id="original-text">-</span>
+                                </div>
+                                <div class="result-item">
+                                    <span class="result-label">Plaintext (Hex):</span>
+                                    <span class="result-value mono" id="plaintext-hex">-</span>
+                                </div>
+                                <div class="result-item">
+                                    <span class="result-label">Key (Hex):</span>
+                                    <span class="result-value mono" id="key-hex">-</span>
+                                </div>
+                                <div class="result-item">
+                                    <span class="result-label">Ciphertext (Hex):</span>
+                                    <span class="result-value mono highlight" id="ciphertext-hex">-</span>
+                                </div>
+                                <div class="result-item">
+                                    <span class="result-label">Encryption Time:</span>
+                                    <span class="result-value" id="encryption-time">-</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Copy and Decrypt Options -->
+                            <div class="result-actions">
+                                <button id="copy-ciphertext" class="btn-secondary">📋 Copy Ciphertext</button>
+                                <button id="start-decryption" class="btn-primary">🔓 Decrypt This</button>
+                                <button id="save-result" class="btn-secondary">💾 Save Result</button>
+                            </div>
+                        </div>
+
+                        <!-- Decryption Section -->
+                        <div class="decryption-section" id="decryption-section" style="display: none;">
+                            <h4>🔓 Decryption Mode</h4>
+                            <div class="decryption-inputs">
+                                <div class="input-group">
+                                    <label for="ciphertext-input">Ciphertext to Decrypt (16 bytes hex):</label>
+                                    <input type="text" id="ciphertext-input" placeholder="39 25 84 1d 02 dc 09 fb dc 11 85 97 19 6a 0b 32" maxlength="47">
+                                    <span class="input-hint">Enter 16 hex bytes separated by spaces</span>
+                                </div>
+                                
+                                <div class="input-group">
+                                    <label for="decrypt-key-input">Decryption Key (16 bytes hex):</label>
+                                    <input type="text" id="decrypt-key-input" placeholder="2b 7e 15 16 28 ae d2 a6 ab f7 15 88 09 cf 4f 3c" maxlength="47">
+                                    <span class="input-hint">Use the same key that was used for encryption</span>
+                                </div>
+                                
+                                <div class="decryption-controls">
+                                    <button id="decrypt-start" class="btn-primary">🎬 Start Decryption</button>
+                                    <button id="decrypt-reset" class="btn-secondary">🔄 Reset</button>
+                                    <button id="switch-to-encrypt" class="btn-secondary">🔐 Back to Encryption</button>
+                                </div>
+                            </div>
+                            
+                            <!-- Decryption Result -->
+                            <div class="decryption-result" id="decryption-result" style="display: none;">
+                                <h5>📖 Decryption Result</h5>
+                                <div class="result-display">
+                                    <div class="result-item">
+                                        <span class="result-label">Ciphertext (Hex):</span>
+                                        <span class="result-value mono" id="decrypt-ciphertext-hex">-</span>
+                                    </div>
+                                    <div class="result-item">
+                                        <span class="result-label">Decrypted (Hex):</span>
+                                        <span class="result-value mono" id="decrypted-hex">-</span>
+                                    </div>
+                                    <div class="result-item">
+                                        <span class="result-label">Decrypted Text:</span>
+                                        <span class="result-value highlight" id="decrypted-text">-</span>
+                                    </div>
+                                    <div class="result-item">
+                                        <span class="result-label">Decryption Time:</span>
+                                        <span class="result-value" id="decryption-time">-</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="analyzer.js"></script>
+    <script src="aes-visualizer.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

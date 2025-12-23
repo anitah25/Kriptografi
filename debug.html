@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>S-box Debugging Tool</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #f5f5f5; }
+        .debug-section { background: white; margin: 10px 0; padding: 15px; border-radius: 5px; border-left: 4px solid #3498db; }
+        .error { border-left-color: #e74c3c; }
+        .success { border-left-color: #27ae60; }
+        .warning { border-left-color: #f39c12; }
+        button { padding: 10px 15px; margin: 5px; border: none; background: #3498db; color: white; border-radius: 3px; cursor: pointer; }
+        button:hover { background: #2980b9; }
+        pre { background: #ecf0f1; padding: 10px; border-radius: 3px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🔬 S-box Upload Debug Tool</h1>
+    
+    <div class="debug-section">
+        <h3>Step 1: Test File Upload</h3>
+        <input type="file" id="debugFileInput" accept=".csv,.txt">
+        <button onclick="testFileUpload()">Test File Upload</button>
+        <div id="fileResult"></div>
+    </div>
+    
+    <div class="debug-section">
+        <h3>Step 2: Test Manual S-box</h3>
+        <button onclick="testManualSbox()">Set Test S-box (Inverted)</button>
+        <button onclick="testStandardSbox()">Set Standard AES S-box</button>
+        <div id="manualResult"></div>
+    </div>
+    
+    <div class="debug-section">
+        <h3>Step 3: Test S-box Display</h3>
+        <button onclick="testSboxDisplay()">Check S-box in Dashboard</button>
+        <div id="displayResult"></div>
+    </div>
+    
+    <div class="debug-section">
+        <h3>Step 4: Test S-box in Encryption</h3>
+        <button onclick="testSboxEncryption()">Test S-box in Encryption</button>
+        <div id="encryptionResult"></div>
+    </div>
+
+    <!-- Include the main scripts -->
+    <script src="analyzer.js"></script>
+    <script src="aes-visualizer.js"></script>
+    <script src="script.js"></script>
+
+    <script>
+        // Wait for scripts to load
+        setTimeout(() => {
+            console.log('Debug tool ready');
+        }, 1000);
+
+        function testFileUpload() {
+            const fileInput = document.getElementById('debugFileInput');
+            const resultDiv = document.getElementById('fileResult');
+            
+            if (!fileInput.files[0]) {
+                resultDiv.innerHTML = '<div class="error">Please select a file first</div>';
+                return;
+            }
+            
+            const file = fileInput.files[0];
+            console.log('Testing file:', file.name, file.size, 'bytes');
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const content = e.target.result;
+                console.log('File content length:', content.length);
+                console.log('First 100 chars:', content.substring(0, 100));
+                
+                try {
+                    // Test parsing like the main app
+                    const values = [];
+                    const lines = content.split(/\r?\n/);
+                    
+                    for (const line of lines) {
+                        if (line.trim()) {
+                            const rowValues = line.split(',').map(val => val.trim());
+                            for (const val of rowValues) {
+                                if (val) {
+                                    const num = parseInt(val, 10);
+                                    if (!isNaN(num)) {
+                                        values.push(num);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            <h4>File parsed successfully!</h4>
+                            <p><strong>Values found:</strong> ${values.length}</p>
+                            <p><strong>First 10:</strong> [${values.slice(0, 10).join(', ')}]</p>
+                            <p><strong>Last 10:</strong> [${values.slice(-10).join(', ')}]</p>
+                        </div>
+                    `;
+                    
+                    if (values.length !== 256) {
+                        resultDiv.innerHTML += `<div class="error">❌ Expected 256 values, got ${values.length}</div>`;
+                    }
+                    
+                } catch (error) {
+                    resultDiv.innerHTML = `<div class="error">❌ Parse error: ${error.message}</div>`;
+                }
+            };
+            
+            reader.readAsText(file);
+        }
+
+        function testManualSbox() {
+            const resultDiv = document.getElementById('manualResult');
+            
+            try {
+                // Create inverted S-box
+                const testSBox = [];
+                for (let i = 0; i < 256; i++) {
+                    testSBox.push(255 - i);
+                }
+                
+                console.log('Created test S-box, first 10:', testSBox.slice(0, 10));
+                
+                // Try to set it in dashboard
+                if (window.dashboard) {
+                    window.dashboard.currentSBox = testSBox;
+                    window.dashboard.renderSBoxGrid(testSBox);
+                    window.dashboard.updateStatus('Test S-box set via debug tool');
+                    
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            ✅ Test S-box set successfully!
+                            <pre>Values: [${testSBox.slice(0, 20).join(', ')}...]</pre>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = '<div class="error">❌ Dashboard not found</div>';
+                }
+                
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">❌ Error: ${error.message}</div>`;
+                console.error('testManualSbox error:', error);
+            }
+        }
+
+        function testStandardSbox() {
+            const resultDiv = document.getElementById('manualResult');
+            
+            try {
+                if (window.dashboard) {
+                    window.dashboard.loadStandardAESSBox();
+                    
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            ✅ Standard AES S-box loaded
+                            <pre>First 10: [${window.dashboard.currentSBox.slice(0, 10).join(', ')}]</pre>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = '<div class="error">❌ Dashboard not found</div>';
+                }
+                
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">❌ Error: ${error.message}</div>`;
+            }
+        }
+
+        function testSboxDisplay() {
+            const resultDiv = document.getElementById('displayResult');
+            
+            try {
+                if (!window.dashboard) {
+                    resultDiv.innerHTML = '<div class="error">❌ Dashboard not available</div>';
+                    return;
+                }
+                
+                const currentSBox = window.dashboard.currentSBox;
+                
+                if (!currentSBox) {
+                    resultDiv.innerHTML = '<div class="warning">⚠️ No S-box currently loaded</div>';
+                    return;
+                }
+                
+                // Check if it's displayed in the grid
+                const grid = document.getElementById('sboxGrid');
+                const firstCell = grid ? grid.querySelector('.grid-cell.data') : null;
+                const firstCellValue = firstCell ? firstCell.textContent : 'N/A';
+                
+                resultDiv.innerHTML = `
+                    <div class="success">
+                        <h4>✅ S-box Status Check</h4>
+                        <p><strong>Dashboard S-box:</strong> ${currentSBox.length} values</p>
+                        <p><strong>First 10:</strong> [${currentSBox.slice(0, 10).join(', ')}]</p>
+                        <p><strong>First grid cell shows:</strong> ${firstCellValue}</p>
+                        <p><strong>Expected (if custom):</strong> FF (255 in hex)</p>
+                        <p><strong>Expected (if standard):</strong> 63 (99 in hex)</p>
+                    </div>
+                `;
+                
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">❌ Error: ${error.message}</div>`;
+                console.error('testSboxDisplay error:', error);
+            }
+        }
+
+        function testSboxEncryption() {
+            const resultDiv = document.getElementById('encryptionResult');
+            
+            try {
+                if (!window.dashboard || !window.simulationController) {
+                    resultDiv.innerHTML = '<div class="error">❌ Dashboard or simulation controller not available</div>';
+                    return;
+                }
+                
+                const currentSBox = window.dashboard.currentSBox;
+                
+                if (!currentSBox) {
+                    resultDiv.innerHTML = '<div class="warning">⚠️ No S-box loaded. Please set one first.</div>';
+                    return;
+                }
+                
+                // Create test visualizer
+                const visualizer = new AESVisualizer(currentSBox);
+                
+                // Test with simple input
+                const plaintext = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+                const key = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+                
+                visualizer.initializeEncryption(plaintext, key);
+                
+                // Check what S-box is actually being used
+                const step = visualizer.nextStep(); // Initial AddRoundKey
+                const subBytesStep = visualizer.nextStep(); // SubBytes - this should use our S-box
+                
+                const resultState = visualizer.stateToBytes(visualizer.state);
+                
+                resultDiv.innerHTML = `
+                    <div class="success">
+                        <h4>✅ Encryption Test Results</h4>
+                        <p><strong>Input:</strong> [${plaintext.join(', ')}]</p>
+                        <p><strong>After SubBytes:</strong> [${resultState.slice(0, 16).join(', ')}]</p>
+                        <p><strong>S-box used in visualizer:</strong> ${visualizer.isCustomSBox() ? 'Custom' : 'Standard'}</p>
+                        <p><strong>Expected (if custom inverted):</strong> High values like [255, 254, 253...]</p>
+                        <p><strong>Expected (if standard AES):</strong> Standard S-box values like [99, 124, ...]</p>
+                        
+                        <h5>Diagnosis:</h5>
+                        ${resultState[0] > 200 ? 
+                            '<div class="success">✅ Likely using custom S-box (high values detected)</div>' :
+                            '<div class="warning">⚠️ Possibly using standard S-box (low-medium values)</div>'
+                        }
+                    </div>
+                `;
+                
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">❌ Error: ${error.message}</div>`;
+                console.error('testSboxEncryption error:', error);
+            }
+        }
+    </script>
+</body>
+</html>
